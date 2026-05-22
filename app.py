@@ -1179,9 +1179,8 @@ with tabs[8]:
             ],
             showscale=True,
             colorbar=dict(
-                title='P (%)',
+                title=dict(text='P (%)', font=dict(color='#a7b5c9')),
                 tickfont=dict(color='#a7b5c9'),
-                titlefont=dict(color='#a7b5c9'),
             ),
             hovertemplate='De: %{y}<br>Para: %{x}<br>P = %{z:.2f}%<extra></extra>',
         ))
@@ -1238,7 +1237,7 @@ with tabs[8]:
             return f'color: {color}; font-weight: 600'
 
         st.dataframe(
-            events_df.style.applymap(color_tipo, subset=['Tipo']),
+            events_df.style.map(color_tipo, subset=['Tipo']),
             use_container_width=True,
             hide_index=True,
             height=350,
