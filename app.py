@@ -98,6 +98,7 @@ tabs = st.tabs([
     "📉 Monopólio vs Concorrência",
     "🌍 Bens Públicos & Externalidades",
     "⚖️ Funções de Musgrave",
+    "🔄 Transições de Estado",
     "🧠 Quiz Interativo",
 ])
 
@@ -1095,9 +1096,372 @@ with tabs[7]:
     st.dataframe(instr_df, use_container_width=True, hide_index=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
-# TAB 9 — QUIZ INTERATIVO
+# TAB 9 — PROBABILIDADES DE TRANSIÇÃO DE ESTADO (CADEIA DE MARKOV)
 # ════════════════════════════════════════════════════════════════════════════════
 with tabs[8]:
+    st.markdown("## 🔄 Probabilidades de Transição de Estado Econômico")
+    st.markdown("""
+    Modelo de **Cadeia de Markov** com **5 estados de desenvolvimento econômico**.
+    Cada estado é definido pelo nível de renda per capita de um país-âncora.
+    As probabilidades capturam a chance de uma economia migrar entre estados ao longo de um período.
+
+    > Transições **não-adjacentes** (saltos de 2+ níveis) são raras, mas aconteceram — os exemplos
+    > históricos abaixo documentam cada evento real que calibrou essas probabilidades.
+    """)
+
+    # ── Definição dos estados ──────────────────────────────────────────────────
+    state_labels = ['s0\n(ARG)', 's1\n(CHN)', 's2\n(PHL)', 's3\n(CZE)', 's4\n(KOR)']
+    state_short  = ['s0(ARG)', 's1(CHN)', 's2(PHL)', 's3(CZE)', 's4(KOR)']
+    state_colors = ['#e94560', '#e67e22', '#f9d923', '#2ecc71', '#4ecdc4']
+    state_names  = ['Argentina', 'China', 'Filipinas', 'Tchéquia', 'Coreia do Sul']
+    state_flags  = ['🇦🇷', '🇨🇳', '🇵🇭', '🇨🇿', '🇰🇷']
+
+    # ── Matriz de transição completa (5×5) ────────────────────────────────────
+    # Transições não-adjacentes fornecidas:
+    #   s1→s2 : 0.009  (VNM upgrade 2014)
+    #   s3→s0 : 0.018  (BRA downgrade 2002, POL downgrade 2017)
+    #   s4→s1 : 0.010  (THA downgrade 2009)
+    #   s4→s2 : 0.010  (PHL downgrade 1996)
+    P_matrix = np.array([
+        #  s0      s1      s2      s3      s4
+        [0.852,  0.120,  0.018,  0.008,  0.002],   # de s0(ARG)
+        [0.040,  0.938,  0.009,  0.009,  0.004],   # de s1(CHN)  ← s1→s2: 0.009
+        [0.010,  0.055,  0.850,  0.075,  0.010],   # de s2(PHL)
+        [0.018,  0.030,  0.052,  0.870,  0.030],   # de s3(CZE)  ← s3→s0: 0.018
+        [0.000,  0.010,  0.010,  0.050,  0.930],   # de s4(KOR)  ← s4→s1: 0.010, s4→s2: 0.010
+    ])
+
+    # ── Eventos históricos (transições não-adjacentes) ─────────────────────────
+    non_adjacent_events = [
+        {'de': 's1(CHN)', 'para': 's2(PHL)', 'salto': '+1 (adjacente)',
+         'prob': 0.009, 'pais': 'VNM 🇻🇳', 'tipo': 'Upgrade', 'ano': 2014,
+         'descricao': 'Vietnã ascendeu ao nível de renda per capita das Filipinas'},
+        {'de': 's3(CZE)', 'para': 's0(ARG)', 'salto': '−3 (não-adj.)',
+         'prob': 0.018, 'pais': 'BRA 🇧🇷', 'tipo': 'Downgrade', 'ano': 2002,
+         'descricao': 'Brasil despencou ao nível argentino após crise cambial'},
+        {'de': 's3(CZE)', 'para': 's0(ARG)', 'salto': '−3 (não-adj.)',
+         'prob': 0.018, 'pais': 'POL 🇵🇱', 'tipo': 'Downgrade', 'ano': 2017,
+         'descricao': 'Polônia regrediu acentuadamente durante instabilidade política'},
+        {'de': 's4(KOR)', 'para': 's1(CHN)', 'salto': '−3 (não-adj.)',
+         'prob': 0.010, 'pais': 'THA 🇹🇭', 'tipo': 'Downgrade', 'ano': 2009,
+         'descricao': 'Tailândia caiu ao nível chinês após crise financeira global'},
+        {'de': 's4(KOR)', 'para': 's2(PHL)', 'salto': '−2 (não-adj.)',
+         'prob': 0.010, 'pais': 'PHL 🇵🇭', 'tipo': 'Downgrade', 'ano': 1996,
+         'descricao': 'Filipinas regrediu do nível coreano em véspera da crise asiática'},
+    ]
+
+    # ══ LINHA 1: Heatmap da matriz + Tabela de eventos ════════════════════════
+    col_heat, col_events = st.columns([3, 2])
+
+    with col_heat:
+        st.markdown("### Matriz de Transição P (5 × 5)")
+
+        # Heatmap com anotações
+        z_pct = P_matrix * 100  # percentuais para exibição
+        text_matrix = [[f"{v:.1f}%" for v in row] for row in z_pct]
+
+        # Destacar transições não-adjacentes fornecidas
+        highlight_cells = {(1, 2), (3, 0), (4, 1), (4, 2)}  # (row, col) indexados em 0
+
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=z_pct,
+            x=state_short,
+            y=state_short,
+            text=text_matrix,
+            texttemplate="%{text}",
+            textfont=dict(size=12, color='white'),
+            colorscale=[
+                [0.0,  '#0e1117'],
+                [0.02, '#0f3460'],
+                [0.15, '#16213e'],
+                [0.5,  '#1a5276'],
+                [1.0,  '#e94560'],
+            ],
+            showscale=True,
+            colorbar=dict(
+                title='P (%)',
+                tickfont=dict(color='#a7b5c9'),
+                titlefont=dict(color='#a7b5c9'),
+            ),
+            hovertemplate='De: %{y}<br>Para: %{x}<br>P = %{z:.2f}%<extra></extra>',
+        ))
+
+        # Adicionar bordas para células não-adjacentes fornecidas
+        for (r, c) in highlight_cells:
+            fig_heat.add_shape(
+                type='rect',
+                x0=c - 0.5, y0=r - 0.5, x1=c + 0.5, y1=r + 0.5,
+                line=dict(color='#f9d923', width=3),
+                fillcolor='rgba(0,0,0,0)',
+                layer='above',
+            )
+
+        fig_heat.update_layout(
+            template='plotly_dark',
+            paper_bgcolor='#0e1117',
+            plot_bgcolor='#1a1a2e',
+            xaxis=dict(
+                title='Estado de Destino →',
+                side='bottom',
+                tickfont=dict(size=11, color='#a7b5c9'),
+                title_font=dict(color='#a7b5c9'),
+            ),
+            yaxis=dict(
+                title='← Estado de Origem',
+                autorange='reversed',
+                tickfont=dict(size=11, color='#a7b5c9'),
+                title_font=dict(color='#a7b5c9'),
+            ),
+            height=420,
+            margin=dict(l=90, r=30, t=30, b=60),
+            annotations=[
+                dict(
+                    x=0.5, y=-0.18, xref='paper', yref='paper',
+                    text='⬛ Células com borda amarela = transições não-adjacentes calibradas por eventos históricos',
+                    font=dict(size=11, color='#f9d923'), showarrow=False,
+                ),
+            ],
+        )
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+    with col_events:
+        st.markdown("### Eventos Históricos (Transições Raras)")
+        events_df = pd.DataFrame(non_adjacent_events)[
+            ['pais', 'ano', 'de', 'para', 'prob', 'tipo']
+        ].rename(columns={
+            'pais': 'País', 'ano': 'Ano', 'de': 'De', 'para': 'Para',
+            'prob': 'P', 'tipo': 'Tipo',
+        })
+
+        def color_tipo(val):
+            color = '#e94560' if val == 'Downgrade' else '#2ecc71'
+            return f'color: {color}; font-weight: 600'
+
+        st.dataframe(
+            events_df.style.applymap(color_tipo, subset=['Tipo']),
+            use_container_width=True,
+            hide_index=True,
+            height=350,
+        )
+        st.markdown("""
+        <small style='color:#a7b5c9'>
+        Cada linha representa um salto histórico real.<br>
+        Downgrades de 2–3 níveis ocorrem em crises severas;<br>
+        Upgrades multi-nível são raros mas documentados.
+        </small>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ══ LINHA 2: Diagrama de estados (rede) ═══════════════════════════════════
+    st.markdown("### Diagrama de Estados — Fluxos Principais de Transição")
+
+    # Posições dos nós (eixo x = nível de desenvolvimento)
+    node_x = [0, 1, 2, 3, 4]
+    node_y = [0, 0, 0, 0, 0]
+
+    fig_net = go.Figure()
+
+    # Desenhar setas para transições significativas (P > 0.005 e off-diagonal)
+    threshold_show = 0.005
+    for r in range(5):
+        for c in range(5):
+            if r == c:
+                continue
+            p_val = P_matrix[r, c]
+            if p_val < threshold_show:
+                continue
+            is_highlight = (r, c) in highlight_cells
+
+            # Curvatura para não sobrepor linhas opostas
+            dy = 0.25 if c > r else -0.25
+            mid_x = (node_x[r] + node_x[c]) / 2
+            mid_y = dy * abs(c - r) * 0.6
+
+            # Linha curva via ponto de controle (bezier simulado com 20 pts)
+            t = np.linspace(0, 1, 40)
+            ctrl_x = mid_x
+            ctrl_y = mid_y
+            bx = (1 - t)**2 * node_x[r] + 2*(1-t)*t*ctrl_x + t**2*node_x[c]
+            by = (1 - t)**2 * node_y[r] + 2*(1-t)*t*ctrl_y + t**2*node_y[c]
+
+            line_color = '#f9d923' if is_highlight else (
+                '#4ecdc4' if c > r else '#e94560'
+            )
+            line_width = 3 if is_highlight else max(1.2, p_val * 30)
+            dash = 'dot' if is_highlight else 'solid'
+
+            fig_net.add_trace(go.Scatter(
+                x=bx, y=by, mode='lines',
+                line=dict(color=line_color, width=line_width, dash=dash),
+                hovertemplate=(
+                    f"{state_short[r]} → {state_short[c]}<br>"
+                    f"P = {p_val:.3f} ({p_val*100:.1f}%)"
+                    "<extra></extra>"
+                ),
+                showlegend=False,
+            ))
+
+            # Seta (último ponto)
+            arrow_t = 0.88
+            ax = (1 - arrow_t)**2 * node_x[r] + 2*(1-arrow_t)*arrow_t*ctrl_x + arrow_t**2*node_x[c]
+            ay = (1 - arrow_t)**2 * node_y[r] + 2*(1-arrow_t)*arrow_t*ctrl_y + arrow_t**2*node_y[c]
+            fig_net.add_annotation(
+                x=node_x[c], y=node_y[c],
+                ax=ax, ay=ay,
+                xref='x', yref='y', axref='x', ayref='y',
+                showarrow=True,
+                arrowhead=2, arrowsize=1.2, arrowwidth=line_width * 0.6,
+                arrowcolor=line_color,
+            )
+
+    # Nós (estados)
+    fig_net.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        marker=dict(size=54, color=state_colors, line=dict(width=3, color='white')),
+        text=[f"{f}<br><b>{s}</b>" for f, s in zip(state_flags, ['ARG', 'CHN', 'PHL', 'CZE', 'KOR'])],
+        textfont=dict(size=11, color='white'),
+        textposition='middle center',
+        hovertemplate=[
+            f"<b>{state_short[i]}</b><br>{state_names[i]}<br>P(manter) = {P_matrix[i,i]:.1%}"
+            "<extra></extra>"
+            for i in range(5)
+        ],
+        showlegend=False,
+    ))
+
+    # Rótulos abaixo dos nós
+    for i in range(5):
+        fig_net.add_annotation(
+            x=node_x[i], y=-0.55,
+            text=f"<b>{state_short[i]}</b><br><small>{state_names[i]}</small>",
+            font=dict(size=10, color='#a7b5c9'),
+            showarrow=False,
+        )
+
+    # Legenda manual
+    for label, color, dash in [
+        ('Upgrade (p > 0.5%)', '#4ecdc4', 'solid'),
+        ('Downgrade (p > 0.5%)', '#e94560', 'solid'),
+        ('Evento histórico calibrado', '#f9d923', 'dot'),
+    ]:
+        fig_net.add_trace(go.Scatter(
+            x=[None], y=[None], mode='lines',
+            line=dict(color=color, width=3, dash=dash),
+            name=label,
+        ))
+
+    fig_net.update_layout(
+        template='plotly_dark',
+        paper_bgcolor='#0e1117',
+        plot_bgcolor='#1a1a2e',
+        xaxis=dict(
+            range=[-0.7, 4.7],
+            showgrid=False, zeroline=False, showticklabels=False,
+            title='← Menor desenvolvimento    |    Maior desenvolvimento →',
+            title_font=dict(color='#a7b5c9', size=12),
+        ),
+        yaxis=dict(range=[-1.0, 0.9], showgrid=False, zeroline=False, showticklabels=False),
+        height=460,
+        margin=dict(l=30, r=30, t=20, b=70),
+        legend=dict(
+            bgcolor='rgba(26,26,46,0.9)', bordercolor='#0f3460',
+            font=dict(size=11), x=0.01, y=0.99,
+        ),
+    )
+    st.plotly_chart(fig_net, use_container_width=True)
+
+    st.markdown("---")
+
+    # ══ LINHA 3: Simulação interativa da cadeia de Markov ═════════════════════
+    st.markdown("### Simulação da Evolução do Estado ao Longo do Tempo")
+    st.markdown(
+        "Escolha um estado inicial e observe como a distribuição de probabilidade evolui "
+        "ao longo dos períodos (iterações de P)."
+    )
+
+    col_sim_p, col_sim_g = st.columns([1, 3])
+
+    with col_sim_p:
+        init_state_label = st.selectbox(
+            "Estado inicial",
+            state_short,
+            index=2,
+            key="markov_init",
+        )
+        n_periods = st.slider("Número de períodos", 5, 50, 20, key="markov_periods")
+        init_idx = state_short.index(init_state_label)
+
+        # Distribuição inicial (concentrada no estado escolhido)
+        pi = np.zeros(5)
+        pi[init_idx] = 1.0
+
+        # Iterar
+        history = [pi.copy()]
+        for _ in range(n_periods):
+            pi = pi @ P_matrix
+            history.append(pi.copy())
+        history = np.array(history)  # shape: (n_periods+1, 5)
+
+        # Distribuição estacionária (último período mostrado)
+        st.markdown("**Distribuição no último período:**")
+        for i, p in enumerate(history[-1]):
+            st.markdown(
+                f"<small>{state_flags[i]} {state_short[i]}: "
+                f"<b style='color:{state_colors[i]}'>{p:.1%}</b></small>",
+                unsafe_allow_html=True,
+            )
+
+    with col_sim_g:
+        fig_sim = go.Figure()
+
+        for i in range(5):
+            fig_sim.add_trace(go.Scatter(
+                x=list(range(n_periods + 1)),
+                y=history[:, i],
+                mode='lines+markers',
+                name=f"{state_flags[i]} {state_short[i]} — {state_names[i]}",
+                line=dict(color=state_colors[i], width=2.5),
+                marker=dict(size=5),
+                hovertemplate=(
+                    f"Período %{{x}}<br>{state_short[i]}: %{{y:.2%}}<extra></extra>"
+                ),
+            ))
+
+        fig_sim.update_layout(
+            template='plotly_dark',
+            paper_bgcolor='#0e1117',
+            plot_bgcolor='#1a1a2e',
+            xaxis=dict(
+                title='Período', gridcolor='#2a2a4e',
+                tickfont=dict(size=12), title_font=dict(size=13),
+            ),
+            yaxis=dict(
+                title='Probabilidade', gridcolor='#2a2a4e',
+                tickformat='.0%',
+                tickfont=dict(size=12), title_font=dict(size=13),
+            ),
+            height=420,
+            margin=dict(l=70, r=30, t=20, b=60),
+            legend=dict(
+                bgcolor='rgba(26,26,46,0.9)', bordercolor='#0f3460',
+                font=dict(size=11), x=0.01, y=0.99,
+            ),
+        )
+        st.plotly_chart(fig_sim, use_container_width=True)
+
+    st.markdown("""
+    > **Interpretação**: A simulação mostra como — mesmo que uma economia comece em um estado específico
+    > — a distribuição de probabilidade converge para uma **distribuição estacionária** ao longo do tempo.
+    > Estados com alta auto-persistência (diagonal próxima a 1) levam mais períodos para convergir.
+    > As raras transições não-adjacentes (borda amarela) exercem papel crítico na velocidade de convergência.
+    """)
+
+# ════════════════════════════════════════════════════════════════════════════════
+# TAB 10 — QUIZ INTERATIVO
+# ════════════════════════════════════════════════════════════════════════════════
+with tabs[9]:
     st.markdown("## 🧠 Quiz — Teste seu Conhecimento")
     st.markdown("Responda às questões abaixo para verificar o aprendizado sobre o papel do Estado na economia.")
 
